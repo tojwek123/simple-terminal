@@ -188,7 +188,5 @@ int main()
                 }
             }
         }
-
-        printf("Dupa");
     }
 }
