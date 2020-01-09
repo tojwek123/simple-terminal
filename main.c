@@ -22,53 +22,75 @@ char terminal_history_buffer[MAX_HISTORY_LENGTH * (MAX_LINE_LENGTH + 1)];
 
 int client_socket = -1;
 
-int socket_printf(int sock, const char *p_format, ...)
+int on_terminal_write_request(Terminal_t *p_terminal, char *p_data, int data_len)
 {
-	va_list args;
-	va_start(args, p_format);
-	int result = vsnprintf(write_buffer, sizeof(write_buffer), p_format, args);
-	va_end(args);
+	int result = -1;
 
-	if (result > 0)
+	if (-1 != client_socket)
 	{
-		send(sock, write_buffer, result, 0);
+		result = send(client_socket, p_data, data_len, 0);
 	}
 	return result;
 }
 
-void on_terminal_write_request(Terminal_t *p_terminal, char *p_data, uint32_t data_len)
-{
-	if (-1 != client_socket)
-	{
-		send(client_socket, p_data, data_len, 0);
-	}
-}
-
-void on_terminal_line_read(Terminal_t *p_terminal, char *p_line, uint32_t line_len)
+void on_terminal_line_read(Terminal_t *p_terminal, char *p_line, int line_len)
 {
 	if (0 == strcmp(p_line, "history"))
 	{
-		uint32_t number_of_history_entries = terminal_get_number_of_history_entries(p_terminal);
-		socket_printf(client_socket, "\r\n");
+		int number_of_history_entries = terminal_get_number_of_history_entries(p_terminal);
 
 		if (0U == number_of_history_entries)
 		{
-			socket_printf(client_socket, "<No history>\r\n");
+			terminal_printf(p_terminal, "<No history>\r\n\r\n");
 		}
 		else
 		{
-			for (uint32_t i = 0U; i < number_of_history_entries; ++i)
+			for (int i = 0U; i < number_of_history_entries; ++i)
 			{
-				uint32_t history_entry_no = number_of_history_entries - i - 1U;
+				int history_entry_no = number_of_history_entries - i - 1U;
 				char *p_entry = terminal_get_history_entry(p_terminal,history_entry_no);
-				socket_printf(client_socket, "%3d. %s\r\n", history_entry_no + 1U, p_entry);
+				terminal_printf(p_terminal, "%3d. %s\r\n", history_entry_no + 1U, p_entry);
 			}
+			terminal_printf(p_terminal, "\r\n");
 		}
 	}
 	else if (0 == strcmp(p_line, "history clear"))
 	{
 		terminal_clear_history(p_terminal);
 	}
+	else if (0 == strcmp(p_line, "echo off"))
+	{
+		terminal_printf(p_terminal, "echo disabled\r\n\r\n");
+		terminal_set_echo_disabled(p_terminal, true);
+	}
+	else if (0 == strcmp(p_line, "echo on"))
+	{
+		terminal_set_echo_disabled(p_terminal, false);
+		terminal_printf(p_terminal, "echo enabled\r\n\r\n");
+	}
+}
+
+char *on_terminal_suggestion_request(Terminal_t *p_terminal, char *p_line, int line_len)
+{
+	char *p_suggestion = NULL;
+
+	if (0 == strncmp(p_line, "history", line_len))
+	{
+		p_suggestion = "history";
+	}
+	else if (0 == strncmp(p_line, "history clear", line_len))
+	{
+		p_suggestion = "history clear";
+	}
+	else if (0 == strncmp(p_line, "echo o", line_len))
+	{
+		p_suggestion = "echo o";
+	}
+	else if (0 == strncmp(p_line, "echo off", line_len))
+	{
+		p_suggestion = "echo off";
+	}
+	return p_suggestion;
 }
 
 int main()
@@ -79,10 +101,13 @@ int main()
     terminal_init(&console,
     			  terminal_line_buffer,
 				  MAX_LINE_LENGTH,
+				  write_buffer,
+				  sizeof(write_buffer),
 				  terminal_history_buffer,
 				  MAX_HISTORY_LENGTH,
 				  on_terminal_write_request,
-				  on_terminal_line_read);
+				  on_terminal_line_read,
+				  on_terminal_suggestion_request);
 
     /* Initialize winsock */
     if (0 != WSAStartup(MAKEWORD(2,2), &wsaData))
@@ -136,7 +161,7 @@ int main()
 						{
 							printf("Client connected\n");
 
-						    terminal_set_prompt(&console, PROMPT, sizeof(PROMPT) - 1U);
+						    terminal_set_prompt(&console, PROMPT);
 
 							while (1)
 							{

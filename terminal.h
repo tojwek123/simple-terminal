@@ -8,7 +8,7 @@
 #ifndef TERMINAL_H_
 #define TERMINAL_H_
 
-#include <stdint.h>
+#include <stdbool.h>
 
 #define TERMINAL_VT100_SEQUENCE_MAX_LEN	32
 
@@ -27,50 +27,60 @@
 #define TERMINAL_ASCII_END_OF_TEXT			3
 
 typedef struct _Terminal_t Terminal_t;
-typedef void (*Terminal_On_Write_Request_t)(Terminal_t *p_instance, char *p_data, uint32_t data_len);
-typedef void (*Terminal_On_Line_Read_t)(Terminal_t *p_instance, char *p_line, uint32_t line_len);
+typedef int (*Terminal_On_Write_Request_t)(Terminal_t *p_instance, char *p_data, int data_len);
+typedef void (*Terminal_On_Line_Read_t)(Terminal_t *p_instance, char *p_line, int line_len);
+typedef char *(*Terminal_On_Suggestion_Request_t)(Terminal_t *p_instance, char *p_line, int line_len);
 
 typedef struct _Terminal_History_t
 {
 	char *p_entries;
-	uint32_t max_entries;
-	uint32_t entry_max_len;
-	int32_t number_of_entries;
-	uint32_t last_entry_idx;
-	int32_t displayed_entry_no;
+	int max_entries;
+	int entry_max_len;
+    int number_of_entries;
+	int last_entry_idx;
+	int displayed_entry_no;
 } Terminal_History_t;
 
 typedef struct _Terminal_t
 {
 	char *p_line_buffer;
-	uint32_t max_line_len;
-	uint32_t current_line_len;
-	uint32_t cursor_pos;
+	int max_line_len;
+	int current_line_len;
+	int cursor_pos;
+	char *p_write_buffer;
+	int write_buffer_size;
 	char received_vt100_sequence[TERMINAL_VT100_SEQUENCE_MAX_LEN + 1];
-	uint8_t received_vt100_sequence_len;
-	char vt100_sequence_to_send[TERMINAL_VT100_SEQUENCE_MAX_LEN];
+	int received_vt100_sequence_len;
 	Terminal_On_Write_Request_t on_write_request;
 	Terminal_On_Line_Read_t on_line_read;
+	Terminal_On_Suggestion_Request_t on_suggestion_request;
 	Terminal_History_t history;
 	char *p_prompt;
-	uint32_t prompt_len;
+	bool echo_disabled;
 } Terminal_t;
 
 void terminal_init(Terminal_t *p_terminal,
 		           char *p_line_buffer,
-				   uint32_t max_line_len,
+				   int max_line_len,
+				   char *p_write_buffer,
+				   int write_buffer_size,
 				   char *p_history_entries,
-				   uint32_t history_max_entries,
+				   int history_max_entries,
 				   Terminal_On_Write_Request_t on_write_request,
-				   Terminal_On_Line_Read_t on_line_read);
+				   Terminal_On_Line_Read_t on_line_read,
+				   Terminal_On_Suggestion_Request_t on_suggestion_request);
 
 void terminal_feed(Terminal_t *p_terminal, char byte);
 
-void terminal_set_prompt(Terminal_t *p_terminal, char *p_prompt, uint32_t prompt_len);
+int terminal_printf(Terminal_t *p_terminal, const char *p_format, ...);
 
-uint32_t terminal_get_number_of_history_entries(Terminal_t *p_terminal);
+void terminal_set_prompt(Terminal_t *p_terminal, char *p_prompt);
 
-char *terminal_get_history_entry(Terminal_t *p_terminal, int32_t entry_no);
+void terminal_set_echo_disabled(Terminal_t *p_terminal, bool disabled);
+
+int terminal_get_number_of_history_entries(Terminal_t *p_terminal);
+
+char *terminal_get_history_entry(Terminal_t *p_terminal, int entry_no);
 
 void terminal_clear_history(Terminal_t *p_terminal);
 
